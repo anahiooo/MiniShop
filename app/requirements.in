@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+PyYAML
+itsdangerous
+httpx
+pydantic
+argon2-cffi
+jinja2
