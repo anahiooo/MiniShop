@@ -3,6 +3,8 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
+import ast
+import operator
 import base64
 import hashlib
 import ipaddress
@@ -25,6 +27,17 @@ SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
+
+_BIN_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.FloorDiv: operator.floordiv,
+}
+_UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
@@ -67,6 +80,18 @@ def init_db():
                      [(2, "Facture Alice", 42.0), (3, "Facture Bob", 99.0)])
     conn.commit()
     conn.close()
+
+
+def _safe_eval(node):
+    if isinstance(node, ast.Expression):
+        return _safe_eval(node.body)
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+        return _BIN_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+        return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
+    raise ValueError("unsupported expression")
 
 
 @app.exception_handler(Exception)
@@ -128,6 +153,13 @@ def get_file(name: str):
 
 @app.post("/calc")
 def calc(data: dict = Body(...)):
+    expr = data.get("expr")
+    if not isinstance(expr, str) or len(expr) > 100:
+        raise HTTPException(status_code=422, detail="invalid expression")
+    try:
+        result = _safe_eval(ast.parse(expr, mode="eval"))
+    except (ValueError, SyntaxError, ZeroDivisionError, OverflowError, RecursionError):
+        raise HTTPException(status_code=400, detail="invalid expression")
     return {"result": str(eval(data["expr"]))}
 
 
