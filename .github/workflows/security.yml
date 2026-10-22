@@ -1,0 +1,51 @@
+name: security
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *" 
+
+jobs:
+  bandit-pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les outils
+        run: pip install bandit pip-audit
+
+      - name: Bandit (échoue sur sévérité HIGH)
+        run: bandit -r app -lll
+
+      - name: pip-audit (échoue si une CVE est connue)
+        run: pip-audit -r app/requirements.txt
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy (dépendances, secrets, Dockerfile)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
