@@ -5,23 +5,22 @@ Documentation interactive : http://localhost:5000/docs
 """
 import ast
 import operator
-import base64
 import hashlib
 import ipaddress
 import logging
 import os
-import pickle
 import random
 import sqlite3
 import subprocess
 import traceback
-
 import requests
 import uvicorn
 import yaml
+
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
+from pydantic import BaseModel, ConfigDict
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -93,6 +92,11 @@ def _safe_eval(node):
         return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
     raise ValueError("unsupported expression")
 
+class Profile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    email: str | None = None
+
 
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
@@ -160,18 +164,21 @@ def calc(data: dict = Body(...)):
         result = _safe_eval(ast.parse(expr, mode="eval"))
     except (ValueError, SyntaxError, ZeroDivisionError, OverflowError, RecursionError):
         raise HTTPException(status_code=400, detail="invalid expression")
-    return {"result": str(eval(data["expr"]))}
+    return {"result": str(result)}
 
 
 @app.post("/import-yaml")
 async def import_yaml(request: Request):
-    cfg = yaml.load(await request.body(), Loader=yaml.Loader)
+    try:
+        cfg = yaml.safe_load(await request.body())
+    except yaml.YAMLError:
+        raise HTTPException(status_code=400, detail="invalid YAML")
+    
     return {"keys": list(cfg.keys()) if isinstance(cfg, dict) else str(type(cfg))}
 
 
 @app.post("/import-profile")
-async def import_profile(request: Request):
-    profile = pickle.loads(base64.b64decode(await request.body()))
+async def import_profile(profile: Profile):
     return {"profile": str(profile)}
 
 
