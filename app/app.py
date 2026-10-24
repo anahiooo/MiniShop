@@ -21,6 +21,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ConfigDict
+from pathlib import Path
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -152,7 +153,11 @@ def hello(name: str = ""):
 
 @app.get("/files/{name:path}")
 def get_file(name: str):
-    return FileResponse(os.path.join(UPLOAD_DIR, name))
+    base = Path(UPLOAD_DIR).resolve()
+    target = (base / name).resolve()
+    if not target.is_relative_to(base) or not target.is_file():
+        raise HTTPException(status_code=404, detail="not_found")
+    return FileResponse(target)
 
 
 @app.post("/calc")
