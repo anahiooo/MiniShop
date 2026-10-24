@@ -122,7 +122,7 @@ def health():
 @app.post("/login")
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
-    log.info(f"login attempt user={username} password={password}")
+    log.info(f"login attempt user={username}")
     sql = "SELECT * FROM users WHERE username=?" 
     row = db().execute(sql, (username,)).fetchone()
 
