@@ -24,6 +24,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ConfigDict
 from pathlib import Path
 from urllib.parse import urlparse
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -48,15 +50,13 @@ log = logging.getLogger("minishop")
 app = FastAPI(title="MiniShop", debug=True)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
+ph = PasswordHasher() 
 
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
-def md5(value):
-    return hashlib.md5(value.encode()).hexdigest()
 
 
 def init_db():
@@ -74,9 +74,9 @@ def init_db():
         """
     )
     conn.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)",
-                 ("admin", md5("admin123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", md5("alice123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", md5("bob123")))
+                 ("admin", ph.hash("admin123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", ph.hash("alice123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", ph.hash("bob123")))
     conn.executemany("INSERT INTO products (name, price) VALUES (?, ?)",
                      [("apple", 1.2), ("banana", 0.8), ("cherry", 3.5)])
     conn.executemany("INSERT INTO invoices (owner_id, label, amount) VALUES (?, ?, ?)",
@@ -116,10 +116,16 @@ def health():
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
     log.info(f"login attempt user={username} password={password}")
-    sql = "SELECT * FROM users WHERE username=? AND password=?" 
-    row = db().execute(sql, (username, md5(password))).fetchone()
-    if not row:
+    sql = "SELECT * FROM users WHERE username=?" 
+    row = db().execute(sql, (username,)).fetchone()
+
+    try: 
+        if not row:
+            raise VerificationError()
+        ph.verify(row["password"],password) 
+    except (VerificationError, InvalidHashError):
         return JSONResponse({"error": "bad credentials"}, status_code=401)
+    
     request.session["user_id"] = row["id"]
     request.session["token"] = str(random.randint(0, 10**6))
     return {"status": "logged in", "user": row["username"]}
