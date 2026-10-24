@@ -7,3 +7,4 @@ httpx
 pydantic
 argon2-cffi
 jinja2
+python-dotenv

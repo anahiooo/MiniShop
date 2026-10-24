@@ -17,6 +17,7 @@ import requests
 import uvicorn
 import yaml
 import html
+import os
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
@@ -26,11 +27,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from dotenv import load_dotenv
 
-SECRET_KEY = "super-secret-key-123"
+basedir = os.path.abspath(os.path.dirname(__file__))
+dotenv_path = os.path.join(basedir, '../.env')
+load_dotenv(dotenv_path=dotenv_path)
+
+SECRET_KEY = os.environ["SECRET_KEY"]
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
+AWS_KEY = os.environ["AWS_KEY"]
 ALLOWED_FETCH_HOSTS = {"www.cyu.fr"}
 
 _BIN_OPS = {
