@@ -18,6 +18,7 @@ import uvicorn
 import yaml
 import html
 import os
+import secrets
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
@@ -54,7 +55,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
 
 app = FastAPI(title="MiniShop", debug=True)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
 
 ph = PasswordHasher() 
 
@@ -133,7 +134,7 @@ def login(request: Request, data: dict = Body(...)):
         return JSONResponse({"error": "bad credentials"}, status_code=401)
     
     request.session["user_id"] = row["id"]
-    request.session["token"] = str(random.randint(0, 10**6))
+    request.session["token"] = secrets.token_hex(32)
     return {"status": "logged in", "user": row["username"]}
 
 
