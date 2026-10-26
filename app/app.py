@@ -50,6 +50,10 @@ _BIN_OPS = {
 }
 _UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 
+ROLE_PERMISSIONS = {
+    "admin": {"user:list", "user:delete"},
+    "user": set(),
+}
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
@@ -117,6 +121,13 @@ def current_user(request: Request):
         "username": row["username"],
         "role": "admin" if row["is_admin"] else "user",
     }
+
+def require(permission: str):
+    def checker(user: dict = Depends(current_user)):
+        if permission not in ROLE_PERMISSIONS.get(user["role"], set()):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return user
+    return checker
 
 class Profile(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -239,17 +250,13 @@ def invoice(invoice_id: int, user: dict = Depends(current_user)):
 
 
 @app.get("/admin/users")
-def admin_users(request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def admin_users(user: dict = Depends(require("user:list"))):
     rows = db().execute("SELECT id, username, is_admin FROM users").fetchall()
     return [dict(r) for r in rows]
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def delete_user(user_id: int, user: dict = Depends(require("user:delete"))):
     conn = db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
