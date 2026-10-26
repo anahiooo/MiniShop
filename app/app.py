@@ -20,7 +20,7 @@ import html
 import os
 import secrets
 
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ConfigDict
@@ -102,6 +102,21 @@ def _safe_eval(node):
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
         return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
     raise ValueError("unsupported expression")
+
+def current_user(request: Request):
+    user_id = request.session.get("user_id")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="login required")
+    row = db().execute(
+        "SELECT id, username, is_admin FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="login required")
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "role": "admin" if row["is_admin"] else "user",
+    }
 
 class Profile(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -216,12 +231,10 @@ def fetch(url: str):
 
 
 @app.get("/invoices/{invoice_id}")
-def invoice(invoice_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
-    row = db().execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+def invoice(invoice_id: int, user: dict = Depends(current_user)):
+    row = db().execute("SELECT * FROM invoices WHERE id = ? AND owner_id = ?", (invoice_id, user["id"],)).fetchone()
     if not row:
-        return JSONResponse({"error": "not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="not found")
     return dict(row)
 
 
