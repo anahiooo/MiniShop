@@ -26,6 +26,9 @@ from urllib.parse import urlparse
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 dotenv_path = os.path.join(basedir, '../.env')
@@ -36,6 +39,7 @@ DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 AWS_KEY = os.environ["AWS_KEY"]
 ALLOWED_FETCH_HOSTS = {"www.cyu.fr"}
+LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "25/minute")
 
 _BIN_OPS = {
     ast.Add: operator.add,
@@ -57,6 +61,10 @@ log = logging.getLogger("minishop")
 
 app = FastAPI(title="MiniShop", debug=False, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -156,6 +164,7 @@ def health():
 
 
 @app.post("/login")
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
     log.info(f"login attempt user={username}")
