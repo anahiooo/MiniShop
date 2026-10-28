@@ -5,14 +5,11 @@ Documentation interactive : http://localhost:5000/docs
 """
 import ast
 import operator
-import hashlib
 import ipaddress
 import logging
 import os
-import random
 import sqlite3
 import subprocess
-import traceback
 import requests
 import uvicorn
 import yaml
@@ -150,8 +147,8 @@ class Profile(BaseModel):
 
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
-    return HTMLResponse("<pre>" + traceback.format_exc() + "</pre>", status_code=500)
-
+    log.error("Error %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse({"error": "internal server error"}, status_code=500)
 
 @app.get("/health")
 def health():
