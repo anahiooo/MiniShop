@@ -61,6 +61,19 @@ log = logging.getLogger("minishop")
 app = FastAPI(title="MiniShop", debug=True)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; frame-ancestors 'none'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
 ph = PasswordHasher() 
 
 def db():
